@@ -24,5 +24,6 @@ Python library to interact with Terminator through D-Bus.
 from __future__ import annotations
 
 from terminator_dbus._internal.cli import get_parser, main
+from terminator_dbus._internal.client import BUS_BASE, BUS_PATH, Terminator, get_bus_name
 
-__all__: list[str] = ["get_parser", "main"]
+__all__: list[str] = ["BUS_BASE", "BUS_PATH", "Terminator", "get_bus_name", "get_parser", "main"]

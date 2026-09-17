@@ -28,7 +28,9 @@ classifiers = [
     "Topic :: Utilities",
     "Typing :: Typed",
 ]
-dependencies = []
+dependencies = [
+    "dbus-python>=1.3.2",
+]
 
 [project.urls]
 Homepage = "https://pawamoy.github.io/terminator-dbus"
