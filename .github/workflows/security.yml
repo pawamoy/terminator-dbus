@@ -39,6 +39,11 @@ jobs:
       with:
         persist-credentials: false
 
+    - name: Install D-Bus development dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libdbus-1-dev libglib2.0-dev pkg-config
+
     - name: Setup uv
       uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       with:
