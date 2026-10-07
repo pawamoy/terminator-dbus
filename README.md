@@ -1,39 +1,29 @@
 # Terminator D-Bus
 
-
 [![ci](https://github.com/pawamoy/terminator-dbus/workflows/ci/badge.svg)](https://github.com/pawamoy/terminator-dbus/actions?query=workflow%3Aci)
 [![documentation](https://img.shields.io/badge/docs-zensical-FF9100.svg?style=flat)](https://pawamoy.github.io/terminator-dbus/)
 [![pypi version](https://img.shields.io/pypi/v/terminator-dbus.svg)](https://pypi.org/project/terminator-dbus/)
 [![gitter](https://img.shields.io/badge/matrix-chat-4DB798.svg?style=flat)](https://app.gitter.im/#/room/#terminator-dbus:gitter.im)
 
-
 Python library to interact with Terminator through D-Bus.
 
-
 ## Installation
-
 
 ```bash
 pip install terminator-dbus
 ```
 
-
 With [`uv`](https://docs.astral.sh/uv/):
-
 
 ```bash
 uv tool install terminator-dbus
 ```
 
-
 `dbus-python` needs the D-Bus development files when no system package or wheel is available.
-
 
 ## Usage
 
-
 Create one client and reuse it for all calls:
-
 
 ```python
 from terminator_dbus import Terminator
@@ -49,28 +39,21 @@ if terminal is not None:
     terminator.switch_profile(new_terminal, {"profile": "work"})
 ```
 
-
 The client uses a non-empty `TERMINATOR_DBUS_NAME` by default. If it is absent or empty, the client uses the current X11 or Wayland display. Pass `display` to select a different display:
-
 
 ```python
 terminator = Terminator(display=":1")
 ```
 
-
 Pass `bus_name` when you already know the complete D-Bus service name. Both `bus_name` and `display` override `TERMINATOR_DBUS_NAME`:
-
 
 ```python
 terminator = Terminator(bus_name="net.tenshu.Terminator2...")
 ```
 
-
 Terminal creation methods raise `TerminatorError` when Terminator returns a response that starts with `ERROR:`. Import it from `terminator_dbus`. Its `method` and `message` attributes contain the failed method and original response.
 
-
 `TerminatorError` is a subclass of `dbus.DBusException`. Catch `dbus.DBusException` to handle connection failures, remote exceptions, and terminal creation errors together.
-
 
 ## Plugin interfaces
 
@@ -123,20 +106,15 @@ Generic calls preserve plugin results, including strings that start with `ERROR:
 
 ## D-Bus interface
 
-
 This package follows the interface in [Terminator 2.1.6 `ipc.py`](https://github.com/gnome-terminator/terminator/blob/v2.1.6/terminatorlib/ipc.py).
-
 
 - Base service and interface name: `net.tenshu.Terminator2`
 - Object path: `/net/tenshu/Terminator2`
 - Display-specific name: the base name followed by the MD5 digest of the GDK display name
 
-
 Terminator removes the screen suffix before it creates the digest. Thus, `:0` and `:0.0` use the same service name.
 
-
 The `Terminator` class exposes every method in the service:
-
 
 | Python method | D-Bus input | Purpose | Result |
 | --- | --- | --- | --- |
@@ -161,18 +139,13 @@ The `Terminator` class exposes every method in the service:
 | `switch_profile(uuid, options)` | `vv` | Set one profile from the `profile` option. | `None` |
 | `switch_profile_all(options)` | `v` | Set all profiles from the `profile` option. | `None` |
 
-
 Terminator does not assign identifiers to tabs. Its `get_tab` method returns an empty string for a terminal in a notebook.
-
 
 The four `*_cmdline` methods require string-to-string dictionaries. The window and tab creation methods require the complete option mapping from Terminator's command-line parser.
 
-
 Terminator does not declare D-Bus output signatures. `dbus-python` infers each output signature from the value returned by the service method.
 
-
 ## Sponsors
-
 
 <!-- sponsors-start -->
 <!-- sponsors-end -->
