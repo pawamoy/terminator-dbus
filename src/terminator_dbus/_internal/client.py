@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Any, Final
 
 import dbus
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from dbus.bus import BusConnection
+    from dbus.proxies import ProxyObject
 
 
 BUS_BASE: Final = "net.tenshu.Terminator2"
@@ -112,9 +114,10 @@ class TerminatorError(dbus.DBusException):
 class Terminator:
     """Provide Python methods for Terminator's complete D-Bus interface.
 
-    The client keeps one session-bus connection and one proxy. It sends known
-    method signatures directly, so `dbus-python` does not need an
-    introspection request before the first method call.
+    The client keeps one session-bus connection and reuses proxies. Built-in
+    methods send known signatures directly, so they do not need introspection.
+    Plugin interfaces can be discovered and called through dynamic proxies
+    or the generic `call` method.
 
     Parameters:
         bus: An existing D-Bus connection. A session-bus connection is created
@@ -145,6 +148,7 @@ class Terminator:
         self._bus_name = get_bus_name(display) if bus_name is None else bus_name
         self._bus = dbus.SessionBus() if bus is None else bus
         proxy = self._bus.get_object(self.bus_name, BUS_PATH, introspect=False)
+        self._proxies: dict[tuple[str, bool], ProxyObject] = {(BUS_PATH, False): proxy}
         self._interface = dbus.Interface(proxy, self.bus_name)
 
     @property
@@ -153,11 +157,133 @@ class Terminator:
         return self._bus_name
 
     def _call(self, method_name: str, *args: object, signature: str) -> Any:
-        method = self._interface.get_dbus_method(method_name)
+        return self.call(method_name, *args, signature=signature)
+
+    def call(
+        self,
+        method_name: str,
+        *args: object,
+        interface: str | None = None,
+        object_path: str = BUS_PATH,
+        signature: str | None = None,
+    ) -> Any:
+        """Call an arbitrary method on Terminator or a plugin's D-Bus interface.
+
+        Parameters:
+            method_name: D-Bus method to call.
+            *args: Positional arguments sent to the method.
+            interface: D-Bus interface name. Defaults to Terminator's built-in interface.
+            object_path: D-Bus object path exported by the selected Terminator service.
+            signature: Input signature. When unset, the proxy uses introspection
+                to find the signature. An empty string declares a method with no inputs.
+
+        Returns:
+            The original D-Bus result. Plugin results are not converted or
+            checked for error strings.
+
+        Raises:
+            dbus.DBusException: The object, interface, or method is unavailable,
+                or the remote method raises an exception.
+            TerminatorError: A built-in terminal creation method returned an
+                `ERROR:` response.
+        """
+        interface_name = self.bus_name if interface is None else interface
+        builtin = object_path == BUS_PATH and interface_name == self.bus_name
+        if builtin and signature is not None:
+            target = self._interface
+        else:
+            target = self.get_interface(interface_name, object_path=object_path, introspect=signature is None)
+        method = target.get_dbus_method(method_name)
         result = method(*args, signature=signature)
-        if method_name in {"new_window", "new_tab", "hsplit", "vsplit"} and isinstance(result, str) and result.startswith("ERROR:"):
+        if (
+            builtin
+            and method_name in {"new_window", "new_tab", "hsplit", "vsplit"}
+            and isinstance(result, str)
+            and result.startswith("ERROR:")
+        ):
             raise TerminatorError(method_name, result)
         return result
+
+    def get_interface(self, interface: str, *, object_path: str = BUS_PATH, introspect: bool = True) -> dbus.Interface:
+        """Create a dynamic proxy for an interface exported by Terminator or a plugin.
+
+        Methods are available as attributes on the returned interface. For
+        example, a plugin that exports `new_tab` can be called with
+        `plugin.new_tab(uuid, command)`. These calls return raw D-Bus results.
+
+        Parameters:
+            interface: D-Bus interface name.
+            object_path: D-Bus object path exported by the selected Terminator service.
+            introspect: Use introspection to find method signatures. Disable
+                this when every call supplies its own signature.
+
+        Returns:
+            A `dbus.Interface` using the client's existing bus connection.
+            Proxies for the same path and introspection setting are reused.
+
+        Raises:
+            dbus.DBusException: The Terminator service is unavailable.
+        """
+        key = object_path, introspect
+        if key not in self._proxies:
+            self._proxies[key] = self._bus.get_object(self.bus_name, object_path, introspect=introspect)
+        return dbus.Interface(self._proxies[key], interface)
+
+    def discover_interfaces(
+        self,
+        object_path: str = "/",
+        *,
+        recursive: bool = True,
+    ) -> dict[str, dict[str, dbus.Interface]]:
+        """Discover exported D-Bus interfaces and create their dynamic proxies.
+
+        Discovery reports interfaces exported by the running Terminator
+        process. It does not list installed or disabled Python plugins.
+        Standard D-Bus and built-in Terminator interfaces are included.
+
+        Parameters:
+            object_path: Object path where discovery starts. The root path
+                finds plugin objects anywhere in the selected service.
+            recursive: Follow child objects described by introspection.
+
+        Returns:
+            Object paths mapped to interface names and their dynamic proxies.
+            Nodes with no interfaces are omitted.
+
+        Raises:
+            dbus.DBusException: An object cannot be introspected, or the
+                Terminator service is unavailable.
+            xml.etree.ElementTree.ParseError: An object returns invalid XML.
+        """
+        discovered: dict[str, dict[str, dbus.Interface]] = {}
+        pending: list[tuple[str, ET.Element | None]] = [(object_path, None)]
+        visited: set[str] = set()
+        while pending:
+            path, node = pending.pop()
+            if path in visited:
+                continue
+            visited.add(path)
+            if node is None:
+                description = self.call(
+                    "Introspect",
+                    interface="org.freedesktop.DBus.Introspectable",
+                    object_path=path,
+                    signature="",
+                )
+                # The selected Terminator process supplies the introspection XML.
+                node = ET.fromstring(str(description))  # noqa: S314
+            interfaces = {
+                element.attrib["name"]: self.get_interface(element.attrib["name"], object_path=path)
+                for element in node.findall("interface")
+            }
+            if interfaces:
+                discovered[path] = interfaces
+            if recursive:
+                for child in reversed(node.findall("node")):
+                    child_path = f"{path.rstrip('/')}/{child.attrib['name']}"
+                    # A child with contents includes its full introspection description.
+                    pending.append((child_path, child if len(child) else None))
+        return discovered
 
     def new_window_cmdline(self, options: Mapping[str, str]) -> None:
         """Create a window from serialized Terminator command-line options.

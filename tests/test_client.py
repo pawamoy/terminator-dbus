@@ -178,7 +178,10 @@ def test_explicit_display_overrides_the_environment(monkeypatch: pytest.MonkeyPa
         ("vsplit", ("urn:uuid:target",)),
     ],
 )
-@pytest.mark.parametrize("response", ["ERROR: Terminal with supplied UUID not found", dbus.String("ERROR: No UUID specified")])
+@pytest.mark.parametrize(
+    "response",
+    ["ERROR: Terminal with supplied UUID not found", dbus.String("ERROR: No UUID specified")],
+)
 def test_terminal_creation_errors_raise_exceptions(method: str, arguments: tuple[str, ...], response: str) -> None:
     """Turn both Python and D-Bus error strings into exceptions with operation details."""
     proxy = RecordingProxy()
@@ -241,6 +244,9 @@ def test_display_and_bus_name_are_mutually_exclusive() -> None:
 def test_exposes_every_terminator_dbus_method() -> None:
     """Expose each method decorated by Terminator's DBusService."""
     expected_methods = {
+        "call",
+        "discover_interfaces",
+        "get_interface",
         "bg_img",
         "bg_img_all",
         "get_focused_terminal",

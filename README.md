@@ -72,6 +72,55 @@ Terminal creation methods raise `TerminatorError` when Terminator returns a resp
 `TerminatorError` is a subclass of `dbus.DBusException`. Catch `dbus.DBusException` to handle connection failures, remote exceptions, and terminal creation errors together.
 
 
+## Plugin interfaces
+
+Plugins can export additional D-Bus objects and interfaces in the running Terminator service. The client supports these interfaces through generic calls, dynamic proxies, and discovery.
+
+The examples use `source_uuid` for an existing terminal's UUID, obtained with `terminator.get_focused_terminal()`.
+
+To call a method directly, provide its interface, object path, and input signature:
+
+```python
+terminal = terminator.call(
+    "project_split",
+    source_uuid,
+    "/home/user/dev/project",
+    interface="net.tenshu.Terminator2.Devboard",
+    object_path="/net/tenshu/Terminator2/Devboard",
+    signature="ss",
+)
+```
+
+The default interface and object path select Terminator's built-in API. An explicit signature skips introspection. If `signature` is unset, the proxy obtains input signatures through introspection. Use `signature=""` for methods with no inputs.
+
+To call several methods on the same plugin, create a dynamic interface proxy:
+
+```python
+plugin = terminator.get_interface(
+    "net.tenshu.Terminator2.Devboard",
+    object_path="/net/tenshu/Terminator2/Devboard",
+)
+terminal = plugin.project_split(source_uuid, "/home/user/dev/project")
+```
+
+Proxy methods use introspection to obtain their signatures. Pass `introspect=False` to `get_interface` if each call supplies its own `signature`. The client reuses its bus connection and caches proxies by object path and introspection setting.
+
+To find exported interfaces and create their proxies, inspect the running service:
+
+```python
+interfaces = terminator.discover_interfaces()
+plugin = interfaces["/net/tenshu/Terminator2/Devboard"][
+    "net.tenshu.Terminator2.Devboard"
+]
+terminal = plugin.project_split(source_uuid, "/home/user/dev/project")
+```
+
+Discovery starts at `/` and follows child objects. Provide an object path to limit its scope, or use `recursive=False` to inspect one object. Results include standard D-Bus interfaces and Terminator's built-in interface.
+
+Discovery finds exported D-Bus interfaces; it does not list installed, enabled, or disabled Python plugins. Terminator's built-in D-Bus API does not expose that plugin metadata. Plugins must be enabled and export an interface for their methods to be callable.
+
+Generic calls preserve plugin results, including strings that start with `ERROR:`. Calls to built-in terminal creation methods still raise `TerminatorError`. Methods called directly on a dynamic proxy return raw D-Bus results. Remote D-Bus exceptions propagate in all three APIs.
+
 ## D-Bus interface
 
 
