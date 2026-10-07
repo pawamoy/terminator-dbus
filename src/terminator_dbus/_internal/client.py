@@ -56,13 +56,16 @@ def get_bus_name(display: str | None = None) -> str:
     the digest. For example, `:0` and `:0.0` use the same D-Bus name.
 
     Parameters:
-        display: GDK display name. The current desktop display is used when
-            this argument is not set.
+        display: GDK display name. When unset, `TERMINATOR_DBUS_NAME` is used
+            if non-empty, followed by the current desktop display.
 
     Returns:
-        The display-specific name, or the base name when no display is known.
+        The environment's service name, the display-specific name, or the
+        base name when no display is known.
     """
     if display is None:
+        if bus_name := os.environ.get("TERMINATOR_DBUS_NAME"):
+            return bus_name
         display = _default_display()
     if not display:
         return BUS_BASE
@@ -82,6 +85,30 @@ def _optional_string(value: object) -> str | None:
     return str(value)
 
 
+class TerminatorError(dbus.DBusException):
+    """Report a terminal creation failure returned by Terminator.
+
+    This exception is also caught by handlers for `dbus.DBusException`.
+
+    Parameters:
+        method: D-Bus method that failed.
+        message: Original response from Terminator, including the `ERROR:` prefix.
+
+    """
+
+    method: str
+    """D-Bus method that failed."""
+
+    message: str
+    """Original response from Terminator, including the `ERROR:` prefix."""
+
+    def __init__(self, method: str, message: str) -> None:
+        """Keep the failed method and original response with the exception."""
+        super().__init__(f"{method}: {message}")
+        self.method = method
+        self.message = message
+
+
 class Terminator:
     """Provide Python methods for Terminator's complete D-Bus interface.
 
@@ -93,8 +120,11 @@ class Terminator:
         bus: An existing D-Bus connection. A session-bus connection is created
             when this argument is not set.
         display: GDK display name used to calculate Terminator's D-Bus name.
-        bus_name: Exact D-Bus service name. Use this argument for a custom or
-            already discovered Terminator service.
+            Overrides `TERMINATOR_DBUS_NAME` when specified.
+        bus_name: Exact D-Bus service name. Overrides `TERMINATOR_DBUS_NAME`
+            when specified. When both connection settings are unset, a
+            non-empty `TERMINATOR_DBUS_NAME` selects the service before the
+            current desktop display.
 
     Raises:
         ValueError: Both `display` and `bus_name` were specified.
@@ -124,7 +154,10 @@ class Terminator:
 
     def _call(self, method_name: str, *args: object, signature: str) -> Any:
         method = self._interface.get_dbus_method(method_name)
-        return method(*args, signature=signature)
+        result = method(*args, signature=signature)
+        if method_name in {"new_window", "new_tab", "hsplit", "vsplit"} and isinstance(result, str) and result.startswith("ERROR:"):
+            raise TerminatorError(method_name, result)
+        return result
 
     def new_window_cmdline(self, options: Mapping[str, str]) -> None:
         """Create a window from serialized Terminator command-line options.
@@ -163,7 +196,11 @@ class Terminator:
         self._call("unhide_cmdline", _options(options), signature="a{ss}")
 
     def new_window(self) -> str:
-        """Create a window and return its first terminal UUID."""
+        """Create a window and return its first terminal UUID.
+
+        Raises:
+            TerminatorError: Terminator returned an `ERROR:` response.
+        """
         return str(self._call("new_window", signature=""))
 
     def new_tab(self, uuid: str) -> str:
@@ -173,7 +210,10 @@ class Terminator:
             uuid: UUID of a terminal in the target window.
 
         Returns:
-            The new terminal UUID or an error string from Terminator.
+            The new terminal UUID.
+
+        Raises:
+            TerminatorError: Terminator returned an `ERROR:` response.
         """
         return str(self._call("new_tab", uuid, signature="v"))
 
@@ -207,7 +247,10 @@ class Terminator:
                 terminal.
 
         Returns:
-            The new terminal UUID or an error string from Terminator.
+            The new terminal UUID.
+
+        Raises:
+            TerminatorError: Terminator returned an `ERROR:` response.
         """
         return str(self._call("hsplit", uuid, _options(options), signature="vv"))
 
@@ -220,7 +263,10 @@ class Terminator:
                 terminal.
 
         Returns:
-            The new terminal UUID or an error string from Terminator.
+            The new terminal UUID.
+
+        Raises:
+            TerminatorError: Terminator returned an `ERROR:` response.
         """
         return str(self._call("vsplit", uuid, _options(options), signature="vv"))
 

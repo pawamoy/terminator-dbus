@@ -27,9 +27,15 @@ from typing import Any
 import dbus
 import pytest
 
-from terminator_dbus import BUS_BASE, BUS_PATH, Terminator, get_bus_name
+from terminator_dbus import BUS_BASE, BUS_PATH, Terminator, TerminatorError, get_bus_name
 
 INTERFACE = "net.tenshu.Terminator2.test"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_terminator_bus_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the test runner's Terminator service name out of each test."""
+    monkeypatch.delenv("TERMINATOR_DBUS_NAME", raising=False)
 
 
 @dataclass(frozen=True)
@@ -60,7 +66,10 @@ class RecordingProxy:
             self.calls.append(
                 RecordedCall(method, dbus_interface, args, signature if isinstance(signature, str) else None),
             )
-            return self.results.get(method)
+            result = self.results.get(method)
+            if isinstance(result, Exception):
+                raise result
+            return result
 
         return call
 
@@ -103,6 +112,113 @@ def test_get_bus_name_without_a_display(monkeypatch: pytest.MonkeyPatch) -> None
         monkeypatch.delenv(variable, raising=False)
 
     assert get_bus_name() == BUS_BASE
+
+
+def test_environment_selects_the_terminator_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Use the inherited service name instead of calculating one from the display."""
+    monkeypatch.setenv("TERMINATOR_DBUS_NAME", INTERFACE)
+    monkeypatch.setenv("DISPLAY", ":0")
+    proxy = RecordingProxy()
+    bus = RecordingBus(proxy)
+
+    client = Terminator(bus=bus)  # ty: ignore[invalid-argument-type]
+
+    assert get_bus_name() == INTERFACE
+    assert client.bus_name == INTERFACE
+    assert bus.requests == [(INTERFACE, BUS_PATH, False)]
+
+
+def test_empty_environment_service_uses_the_display(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ignore an empty inherited service name and use the current display."""
+    monkeypatch.setenv("TERMINATOR_DBUS_NAME", "")
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.setenv("GDK_BACKEND", "x11")
+    expected_name = get_bus_name(":0")
+    proxy = RecordingProxy()
+    bus = RecordingBus(proxy)
+
+    client = Terminator(bus=bus)  # ty: ignore[invalid-argument-type]
+
+    assert get_bus_name() == expected_name
+    assert client.bus_name == expected_name
+
+
+def test_explicit_service_overrides_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep an explicit service name when a different one is inherited."""
+    monkeypatch.setenv("TERMINATOR_DBUS_NAME", f"{BUS_BASE}.inherited")
+    proxy = RecordingProxy()
+    bus = RecordingBus(proxy)
+
+    client = Terminator(bus=bus, bus_name=INTERFACE)  # ty: ignore[invalid-argument-type]
+
+    assert client.bus_name == INTERFACE
+    assert bus.requests == [(INTERFACE, BUS_PATH, False)]
+
+
+def test_explicit_display_overrides_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Calculate the service for an explicit display despite an inherited service name."""
+    monkeypatch.setenv("TERMINATOR_DBUS_NAME", INTERFACE)
+    expected_name = f"{BUS_BASE}1a9d5db22c73a993ff0b42f64b396873"
+    proxy = RecordingProxy()
+    bus = RecordingBus(proxy)
+
+    client = Terminator(bus=bus, display=":0")  # ty: ignore[invalid-argument-type]
+
+    assert get_bus_name(":0") == expected_name
+    assert client.bus_name == expected_name
+    assert bus.requests == [(expected_name, BUS_PATH, False)]
+
+
+@pytest.mark.parametrize(
+    ("method", "arguments"),
+    [
+        ("new_window", ()),
+        ("new_tab", ("urn:uuid:target",)),
+        ("hsplit", ("urn:uuid:target",)),
+        ("vsplit", ("urn:uuid:target",)),
+    ],
+)
+@pytest.mark.parametrize("response", ["ERROR: Terminal with supplied UUID not found", dbus.String("ERROR: No UUID specified")])
+def test_terminal_creation_errors_raise_exceptions(method: str, arguments: tuple[str, ...], response: str) -> None:
+    """Turn both Python and D-Bus error strings into exceptions with operation details."""
+    proxy = RecordingProxy()
+    proxy.results[method] = response
+    bus = RecordingBus(proxy)
+    client = Terminator(bus=bus, bus_name=INTERFACE)  # ty: ignore[invalid-argument-type]
+
+    with pytest.raises(TerminatorError) as caught:
+        getattr(client, method)(*arguments)
+
+    assert isinstance(caught.value, dbus.DBusException)
+    assert caught.value.method == method
+    assert caught.value.message == response
+    assert str(caught.value) == f"{method}: {response}"
+
+
+@pytest.mark.parametrize("method", ["get_window_title", "get_tab_title"])
+def test_error_prefix_in_a_title_is_preserved(method: str) -> None:
+    """Treat a title that starts with ERROR: as text rather than an operation failure."""
+    title = "ERROR: build failed"
+    proxy = RecordingProxy()
+    proxy.results[method] = dbus.String(title)
+    bus = RecordingBus(proxy)
+    client = Terminator(bus=bus, bus_name=INTERFACE)  # ty: ignore[invalid-argument-type]
+
+    assert getattr(client, method)("urn:uuid:target") == title
+
+
+def test_dbus_exceptions_are_preserved() -> None:
+    """Keep transport failures unchanged when a D-Bus call raises an exception."""
+    failure = dbus.DBusException("Service unavailable")
+    proxy = RecordingProxy()
+    proxy.results["new_window"] = failure
+    bus = RecordingBus(proxy)
+    client = Terminator(bus=bus, bus_name=INTERFACE)  # ty: ignore[invalid-argument-type]
+
+    with pytest.raises(dbus.DBusException) as caught:
+        client.new_window()
+
+    assert caught.value is failure
 
 
 def test_client_reuses_a_non_introspecting_proxy() -> None:

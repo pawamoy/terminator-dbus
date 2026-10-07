@@ -50,7 +50,7 @@ if terminal is not None:
 ```
 
 
-The client uses the current X11 or Wayland display by default. Pass `display` if the current environment does not identify the correct display:
+The client uses a non-empty `TERMINATOR_DBUS_NAME` by default. If it is absent or empty, the client uses the current X11 or Wayland display. Pass `display` to select a different display:
 
 
 ```python
@@ -58,7 +58,7 @@ terminator = Terminator(display=":1")
 ```
 
 
-Pass `bus_name` when you already know the complete D-Bus service name:
+Pass `bus_name` when you already know the complete D-Bus service name. Both `bus_name` and `display` override `TERMINATOR_DBUS_NAME`:
 
 
 ```python
@@ -66,7 +66,10 @@ terminator = Terminator(bus_name="net.tenshu.Terminator2...")
 ```
 
 
-`dbus.DBusException` reports connection and remote method failures. Terminator itself returns strings that start with `ERROR:` for some tab and split failures.
+Terminal creation methods raise `TerminatorError` when Terminator returns a response that starts with `ERROR:`. Import it from `terminator_dbus`. Its `method` and `message` attributes contain the failed method and original response.
+
+
+`TerminatorError` is a subclass of `dbus.DBusException`. Catch `dbus.DBusException` to handle connection failures, remote exceptions, and terminal creation errors together.
 
 
 ## D-Bus interface
@@ -92,13 +95,13 @@ The `Terminator` class exposes every method in the service:
 | `new_tab_cmdline(options)` | `a{ss}` | Create a tab from serialized command-line options. | `None` |
 | `toggle_visibility_cmdline(options)` | `a{ss}` | Toggle all window visibility. | `None` |
 | `unhide_cmdline(options)` | `a{ss}` | Show all hidden windows. | `None` |
-| `new_window()` | empty | Create a window. | New terminal UUID or error string |
-| `new_tab(uuid)` | `v` | Create a tab in a terminal's window. | New terminal UUID or error string |
+| `new_window()` | empty | Create a window. | New terminal UUID |
+| `new_tab(uuid)` | `v` | Create a tab in a terminal's window. | New terminal UUID |
 | `reload_configuration()` | empty | Reload configuration for all terminals. | `None` |
 | `bg_img_all(options)` | `v` | Set all background images from the `file` option. | `None` |
 | `bg_img(uuid, options)` | `vv` | Set one background image from the `file` option. | `None` |
-| `hsplit(uuid, options=None)` | `vv` | Split a terminal horizontally. | New terminal UUID or error string |
-| `vsplit(uuid, options=None)` | `vv` | Split a terminal vertically. | New terminal UUID or error string |
+| `hsplit(uuid, options=None)` | `vv` | Split a terminal horizontally. | New terminal UUID |
+| `vsplit(uuid, options=None)` | `vv` | Split a terminal vertically. | New terminal UUID |
 | `get_terminals()` | empty | Get all terminal UUIDs. | `list[str]` |
 | `get_focused_terminal()` | empty | Get the focused terminal UUID. | `str \| None` |
 | `get_window(uuid)` | `v` | Get a terminal's window UUID. | `str` |
