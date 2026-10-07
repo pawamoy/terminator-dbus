@@ -25,5 +25,20 @@ from __future__ import annotations
 
 from terminator_dbus._internal.cli import get_parser, main
 from terminator_dbus._internal.client import BUS_BASE, BUS_PATH, Terminator, TerminatorError, get_bus_name
+from terminator_dbus._internal.extension import EXTENSION_INTERFACE, EXTENSION_PATH, TerminalExtension, install_plugin
+from terminator_dbus._internal.tree import LayoutTree
 
-__all__: list[str] = ["BUS_BASE", "BUS_PATH", "Terminator", "TerminatorError", "get_bus_name", "get_parser", "main"]
+__all__: list[str] = [
+    "BUS_BASE",
+    "BUS_PATH",
+    "EXTENSION_INTERFACE",
+    "EXTENSION_PATH",
+    "LayoutTree",
+    "TerminalExtension",
+    "Terminator",
+    "TerminatorError",
+    "get_bus_name",
+    "get_parser",
+    "install_plugin",
+    "main",
+]

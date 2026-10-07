@@ -34,6 +34,7 @@ import sys
 from typing import Any
 
 from terminator_dbus._internal import debug
+from terminator_dbus._internal.extension import install_plugin
 
 
 class _DebugInfo(argparse.Action):
@@ -54,6 +55,9 @@ def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="terminator-dbus")
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {debug._get_version()}")
     parser.add_argument("--debug-info", action=_DebugInfo, help="Print debug information.")
+    commands = parser.add_subparsers(dest="command")
+    install = commands.add_parser("install-plugin", help="Install the bundled Terminator plugin.")
+    install.add_argument("--directory", help="Use this plugin directory instead of Terminator's default.")
     return parser
 
 
@@ -70,5 +74,13 @@ def main(args: list[str] | None = None) -> int:
     """
     parser = get_parser()
     opts = parser.parse_args(args=args)
-    print(opts)
+    if opts.command == "install-plugin":
+        try:
+            path = install_plugin(opts.directory)
+        except OSError as error:
+            print(f"Could not install Terminator plugin: {error}", file=sys.stderr)
+            return 1
+        print(f"Installed {path}\nEnable TerminatorDBusExtension in Terminator's Preferences > Plugins.")
+    else:
+        parser.print_help()
     return 0

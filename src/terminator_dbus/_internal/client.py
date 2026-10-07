@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING, Any, Final
 
 import dbus
 
+from terminator_dbus._internal.extension import TerminalExtension as _TerminalExtension
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -155,6 +157,11 @@ class Terminator:
     def bus_name(self) -> str:
         """Return the D-Bus service and interface name used by this client."""
         return self._bus_name
+
+    @property
+    def extension(self) -> _TerminalExtension:
+        """Return a typed client for the bundled terminal and layout extension."""
+        return _TerminalExtension(self)
 
     def _call(self, method_name: str, *args: object, signature: str) -> Any:
         return self.call(method_name, *args, signature=signature)
