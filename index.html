@@ -786,6 +786,67 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#bundled-terminal-extension" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Bundled terminal extension
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Bundled terminal extension">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#layout-trees-and-traversal" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Layout trees and traversal
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layout-manipulation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Layout manipulation
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testing-with-terminator" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Testing with Terminator
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#plugin-interfaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Plugin interfaces
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#d-bus-interface" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -874,13 +935,282 @@
     <span class="p">)</span>
     <span class="n">terminator</span><span class="o">.</span><span class="n">switch_profile</span><span class="p">(</span><span class="n">new_terminal</span><span class="p">,</span> <span class="p">{</span><span class="s2">"profile"</span><span class="p">:</span> <span class="s2">"work"</span><span class="p">})</span>
 </code></pre></div>
-<p>The client uses the current X11 or Wayland display by default. Pass <code>display</code> if the current environment does not identify the correct display:</p>
+<p>The client uses a non-empty <code>TERMINATOR_DBUS_NAME</code> by default. If it is absent or empty, the client uses the current X11 or Wayland display. Pass <code>display</code> to select a different display:</p>
 <div class="highlight"><pre><span></span><code><span class="n">terminator</span> <span class="o">=</span> <span class="n">Terminator</span><span class="p">(</span><span class="n">display</span><span class="o">=</span><span class="s2">":1"</span><span class="p">)</span>
 </code></pre></div>
-<p>Pass <code>bus_name</code> when you already know the complete D-Bus service name:</p>
+<p>Pass <code>bus_name</code> when you already know the complete D-Bus service name. Both <code>bus_name</code> and <code>display</code> override <code>TERMINATOR_DBUS_NAME</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="n">terminator</span> <span class="o">=</span> <span class="n">Terminator</span><span class="p">(</span><span class="n">bus_name</span><span class="o">=</span><span class="s2">"net.tenshu.Terminator2..."</span><span class="p">)</span>
 </code></pre></div>
-<p><code>dbus.DBusException</code> reports connection and remote method failures. Terminator itself returns strings that start with <code>ERROR:</code> for some tab and split failures.</p>
+<p>Terminal creation methods raise <code>TerminatorError</code> when Terminator returns a response that starts with <code>ERROR:</code>. Import it from <code>terminator_dbus</code>. Its <code>method</code> and <code>message</code> attributes contain the failed method and original response.</p>
+<p><code>TerminatorError</code> is a subclass of <code>dbus.DBusException</code>. Catch <code>dbus.DBusException</code> to handle connection failures, remote exceptions, and terminal creation errors together.</p>
+<h2 id="bundled-terminal-extension">Bundled terminal extension<a class="headerlink" href="#bundled-terminal-extension" title="Permanent link">¤</a></h2>
+<p>The package includes a reusable Terminator plugin for targeted tabs and splits. It runs inside Terminator and exports an additional D-Bus interface.</p>
+<p>Install the plugin:</p>
+<div class="highlight"><pre><span></span><code>terminator-dbus<span class="w"> </span>install-plugin
+</code></pre></div>
+<p>Enable <code>TerminatorDBusExtension</code> in Terminator's <strong>Preferences &gt; Plugins</strong>. Open a terminal to load a newly enabled plugin. After updating an already loaded plugin, restart Terminator.</p>
+<p>The command installs a standalone file in <code>$XDG_CONFIG_HOME/terminator/plugins</code>, or <code>~/.config/terminator/plugins</code> by default. Terminator's Python environment does not need this package. Run the command again after upgrading the package to update the installed plugin.</p>
+<p>For a custom plugin directory, use <code>terminator-dbus install-plugin --directory /path/to/plugins</code>. Python callers can use <code>install_plugin(directory=None)</code>.</p>
+<p>Create a proxy for the extension:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">shlex</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">terminator_dbus</span><span class="w"> </span><span class="kn">import</span> <span class="n">EXTENSION_INTERFACE</span><span class="p">,</span> <span class="n">EXTENSION_PATH</span><span class="p">,</span> <span class="n">Terminator</span>
+
+<span class="n">terminator</span> <span class="o">=</span> <span class="n">Terminator</span><span class="p">()</span>
+<span class="n">source_uuid</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"TERMINATOR_UUID"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">terminator</span><span class="o">.</span><span class="n">get_focused_terminal</span><span class="p">()</span>
+<span class="n">extension</span> <span class="o">=</span> <span class="n">terminator</span><span class="o">.</span><span class="n">get_interface</span><span class="p">(</span>
+    <span class="n">EXTENSION_INTERFACE</span><span class="p">,</span>
+    <span class="n">object_path</span><span class="o">=</span><span class="n">EXTENSION_PATH</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">if</span> <span class="n">source_uuid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">terminal</span> <span class="o">=</span> <span class="n">extension</span><span class="o">.</span><span class="n">new_tab</span><span class="p">(</span>
+        <span class="n">source_uuid</span><span class="p">,</span>
+        <span class="p">{</span><span class="s2">"command"</span><span class="p">:</span> <span class="n">shlex</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="s2">"my-program"</span><span class="p">,</span> <span class="s2">"an argument with spaces"</span><span class="p">])},</span>
+    <span class="p">)</span>
+    <span class="n">terminator</span><span class="o">.</span><span class="n">set_tab_title</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">terminal</span><span class="p">),</span> <span class="p">{</span><span class="s2">"tab-title"</span><span class="p">:</span> <span class="s2">"My task"</span><span class="p">})</span>
+    <span class="n">extension</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">source_uuid</span><span class="p">,</span> <span class="s2">"right"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"directory"</span><span class="p">:</span> <span class="s2">"/home/user/dev/project"</span><span class="p">})</span>
+</code></pre></div>
+<p>The interface is <code>net.tenshu.Terminator2.Extension</code>, at <code>/net/tenshu/Terminator2/Extension</code>. Each method returns the new terminal's UUID.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Input signature</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>new_tab(uuid, options)</code></td>
+<td><code>sa{ss}</code></td>
+<td>Open a tab in the source terminal's window.</td>
+</tr>
+<tr>
+<td><code>split(uuid, direction, options)</code></td>
+<td><code>ssa{ss}</code></td>
+<td>Create a terminal <code>right</code>, <code>left</code>, <code>above</code>, or <code>below</code> the source.</td>
+</tr>
+</tbody>
+</table>
+<p><code>options</code> is a string-to-string dictionary. An empty dictionary selects the defaults.</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Behavior when set</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>directory</code></td>
+<td>Use this existing directory, with <code>~</code> expanded. Relative paths resolve in Terminator's process.</td>
+<td>Inherit the terminal being split, or the source terminal for a new tab.</td>
+</tr>
+<tr>
+<td><code>command</code></td>
+<td>Run this shell command when the terminal starts. Quote arguments with <code>shlex.join</code>.</td>
+<td>Use Terminator's configured shell or profile command.</td>
+</tr>
+</tbody>
+</table>
+<p>Terminator's <code>always_split_with_profile</code> setting controls profile inheritance. The extension restores a zoomed terminal's layout before creating a tab or split. Invalid UUIDs, directories, directions, or option names raise remote D-Bus exceptions.</p>
+<h3 id="layout-trees-and-traversal">Layout trees and traversal<a class="headerlink" href="#layout-trees-and-traversal" title="Permanent link">¤</a></h3>
+<p>Use <code>terminator.extension</code> for a typed client that decodes layout queries into Python objects:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">terminator_dbus</span><span class="w"> </span><span class="kn">import</span> <span class="n">Terminator</span>
+
+<span class="n">terminator</span> <span class="o">=</span> <span class="n">Terminator</span><span class="p">()</span>
+<span class="n">extension</span> <span class="o">=</span> <span class="n">terminator</span><span class="o">.</span><span class="n">extension</span>
+<span class="n">source</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"TERMINATOR_UUID"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">terminator</span><span class="o">.</span><span class="n">get_focused_terminal</span><span class="p">()</span>
+
+<span class="k">if</span> <span class="n">source</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">tree</span> <span class="o">=</span> <span class="n">extension</span><span class="o">.</span><span class="n">get_tree</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+    <span class="n">node</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">get_node</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+    <span class="n">parent</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">get_parent</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+    <span class="n">ancestors</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">get_ancestors</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+    <span class="n">neighbors</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">get_neighbors</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="s2">"right"</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">node</span><span class="p">[</span><span class="s2">"directory"</span><span class="p">],</span> <span class="n">node</span><span class="p">[</span><span class="s2">"tab"</span><span class="p">],</span> <span class="n">neighbors</span><span class="p">)</span>
+</code></pre></div>
+<p><code>get_tree</code> returns a <code>LayoutTree</code> snapshot of the node's entire window, including inactive tabs. Its <code>root</code> is the window ID. Its <code>nodes</code> dictionary maps IDs to node records. Its <code>focused_uuid</code> identifies the focused terminal in that window, or is <code>None</code>.</p>
+<p>A window contains tab nodes. Each tab contains one terminal or split subtree. Each split has two ordered children. Queries report the logical layout while zoomed and preserve zoom, focus, and tab selection. Snapshots omit empty branches and flatten splits with one surviving branch.</p>
+<table>
+<thead>
+<tr>
+<th>Node fields</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code>, <code>type</code>, <code>parent</code>, <code>children</code></td>
+<td>Node ID, type, parent ID, and ordered child IDs. The root's parent is <code>None</code>.</td>
+</tr>
+<tr>
+<td><code>direction</code></td>
+<td>Position within a parent split: <code>left</code>, <code>right</code>, <code>above</code>, or <code>below</code>. Otherwise <code>None</code>.</td>
+</tr>
+<tr>
+<td><code>axis</code>, <code>ratio</code></td>
+<td>Split axis: <code>x</code> for left/right or <code>y</code> for above/below. Ratio is the first child's share of available space.</td>
+</tr>
+<tr>
+<td><code>tab</code>, <code>rect</code></td>
+<td>Containing tab ID and normalized <code>[x, y, width, height]</code> rectangle for a terminal or split. Rectangles ignore divider widths.</td>
+</tr>
+<tr>
+<td><code>uuid</code>, <code>directory</code>, <code>profile</code>, <code>focused</code></td>
+<td>Terminal UUID, current working directory, profile name, and focus state.</td>
+</tr>
+<tr>
+<td><code>index</code>, <code>title</code>, <code>active</code></td>
+<td>Tab position, displayed title, and whether the tab is selected.</td>
+</tr>
+<tr>
+<td><code>zoomed</code></td>
+<td>Whether the window currently shows a zoomed terminal.</td>
+</tr>
+</tbody>
+</table>
+<p>Terminal and window IDs are their existing UUIDs. Split and tab IDs are opaque strings. IDs remain stable through extension reloads, resizing, swaps, rotation, and moves. Collapsing a split or removing a tab or window invalidates its ID.</p>
+<table>
+<thead>
+<tr>
+<th>Query</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get_tree(node_id)</code></td>
+<td>A <code>LayoutTree</code> containing the node's window.</td>
+</tr>
+<tr>
+<td><code>get_node(node_id)</code></td>
+<td>One node record.</td>
+</tr>
+<tr>
+<td><code>get_parent(node_id)</code></td>
+<td>Parent record, or <code>None</code> for a window.</td>
+</tr>
+<tr>
+<td><code>get_children(node_id)</code></td>
+<td>Child records in display order. Terminals have no children.</td>
+</tr>
+<tr>
+<td><code>get_ancestors(node_id)</code></td>
+<td>Parent records from the nearest parent through the window.</td>
+</tr>
+<tr>
+<td><code>get_sibling(node_id)</code></td>
+<td>The other branch of a split, or <code>None</code> outside a split.</td>
+</tr>
+<tr>
+<td><code>get_neighbors(uuid, direction)</code></td>
+<td>All terminals sharing the requested edge, ordered along that edge.</td>
+</tr>
+</tbody>
+</table>
+<p>Call traversal methods on <code>tree</code> to use the local snapshot without additional D-Bus calls. Call them on <code>extension</code> to query the current layout. Neighbor queries accept <code>right</code>, <code>left</code>, <code>above</code>, and <code>below</code>. They exclude corner contacts, other tabs, and wrapping at tab edges.</p>
+<p>A sibling can be an entire subtree. For example, a terminal beside a stack of two terminals has one sibling subtree and two right-hand neighbors.</p>
+<h3 id="layout-manipulation">Layout manipulation<a class="headerlink" href="#layout-manipulation" title="Permanent link">¤</a></h3>
+<p>The typed extension client provides these operations:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Behavior</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>set_split_ratio(node_id, ratio)</code></td>
+<td>Resize a split. The finite ratio must be strictly between zero and one.</td>
+<td><code>None</code></td>
+</tr>
+<tr>
+<td><code>swap_children(node_id)</code></td>
+<td>Exchange a split's branches and keep its divider ratio.</td>
+<td><code>None</code></td>
+</tr>
+<tr>
+<td><code>split_node(node_id, direction, options=None)</code></td>
+<td>Add a terminal beside a terminal or entire split subtree.</td>
+<td>New terminal UUID</td>
+</tr>
+<tr>
+<td><code>rotate_subtree(node_id, direction="clockwise")</code></td>
+<td>Rotate a split subtree <code>clockwise</code> or <code>counterclockwise</code>. Preserve its node IDs.</td>
+<td>Rotated split ID</td>
+</tr>
+<tr>
+<td><code>move_node(node_id, target_id, direction)</code></td>
+<td>Move a terminal or split subtree beside another node, including across tabs and windows.</td>
+<td>New enclosing split ID</td>
+</tr>
+<tr>
+<td><code>focus(uuid)</code></td>
+<td>Select the terminal's tab and focus its window and shell.</td>
+<td><code>None</code></td>
+</tr>
+</tbody>
+</table>
+<p>Split and move directions are <code>right</code>, <code>left</code>, <code>above</code>, and <code>below</code>. <code>split_node</code> accepts the same launch options as <code>split</code>. For a subtree, omitted settings inherit from its first terminal in display order.</p>
+<div class="highlight"><pre><span></span><code><span class="n">parent</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">get_parent</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">parent</span><span class="p">[</span><span class="s2">"type"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"split"</span><span class="p">:</span>
+    <span class="n">extension</span><span class="o">.</span><span class="n">set_split_ratio</span><span class="p">(</span><span class="n">parent</span><span class="p">[</span><span class="s2">"id"</span><span class="p">],</span> <span class="mf">0.3</span><span class="p">)</span>
+    <span class="n">extension</span><span class="o">.</span><span class="n">swap_children</span><span class="p">(</span><span class="n">parent</span><span class="p">[</span><span class="s2">"id"</span><span class="p">])</span>
+    <span class="n">extension</span><span class="o">.</span><span class="n">rotate_subtree</span><span class="p">(</span><span class="n">parent</span><span class="p">[</span><span class="s2">"id"</span><span class="p">])</span>
+    <span class="n">created</span> <span class="o">=</span> <span class="n">extension</span><span class="o">.</span><span class="n">split_node</span><span class="p">(</span><span class="n">parent</span><span class="p">[</span><span class="s2">"id"</span><span class="p">],</span> <span class="s2">"below"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"directory"</span><span class="p">:</span> <span class="s2">"/home/user/dev/project"</span><span class="p">})</span>
+    <span class="n">extension</span><span class="o">.</span><span class="n">move_node</span><span class="p">(</span><span class="n">created</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="s2">"right"</span><span class="p">)</span>
+    <span class="n">extension</span><span class="o">.</span><span class="n">focus</span><span class="p">(</span><span class="n">created</span><span class="p">)</span>
+</code></pre></div>
+<p>Moving and rotating existing nodes preserve their running shell processes. Moves preserve tab titles and order, and remove empty source splits, tabs, and windows. A node cannot move beside itself or into its own descendants.</p>
+<p>Mutations restore zoomed layouts before editing. Fetch another snapshot after a mutation to inspect the updated tree. Remote queries and mutations raise <code>dbus.DBusException</code> for invalid IDs or arguments. Local traversal raises <code>KeyError</code> for missing IDs and <code>ValueError</code> for invalid neighbor queries.</p>
+<p>Dynamic D-Bus proxies remain available. Their tree queries return JSON strings; the typed client decodes those strings. Tree queries use input signature <code>s</code>, except <code>get_neighbors</code>, which uses <code>ss</code>. Their output signature is <code>s</code>.</p>
+<p>Mutation input signatures are <code>sd</code> for <code>set_split_ratio</code>, <code>s</code> for <code>swap_children</code> and <code>focus</code>, <code>ssa{ss}</code> for <code>split_node</code>, <code>ss</code> for <code>rotate_subtree</code>, and <code>sss</code> for <code>move_node</code>. Creation, rotation, and move methods return strings; other mutations have no output.</p>
+<h3 id="testing-with-terminator">Testing with Terminator<a class="headerlink" href="#testing-with-terminator" title="Permanent link">¤</a></h3>
+<p>The default test suite uses local snapshots and mocked connections. Run the integration tests with real Terminator, <code>dbus-daemon</code>, and <code>Xvfb</code> installed:</p>
+<div class="highlight"><pre><span></span><code><span class="nv">TERMINATOR_DBUS_INTEGRATION</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>pytest<span class="w"> </span>tests/test_layout_integration.py
+</code></pre></div>
+<p>The tests create a private D-Bus service, display, and configuration. They check layout topology, direction, sizing, focus, zoom, tab identity, and shell process preservation.</p>
+<h2 id="plugin-interfaces">Plugin interfaces<a class="headerlink" href="#plugin-interfaces" title="Permanent link">¤</a></h2>
+<p>Plugins can export additional D-Bus objects and interfaces in the running Terminator service. The client supports these interfaces through generic calls, dynamic proxies, and discovery.</p>
+<p>The examples use <code>source_uuid</code> for an existing terminal's UUID, obtained with <code>terminator.get_focused_terminal()</code>.</p>
+<p>To call a method directly, provide its interface, object path, and input signature:</p>
+<div class="highlight"><pre><span></span><code><span class="n">terminal</span> <span class="o">=</span> <span class="n">terminator</span><span class="o">.</span><span class="n">call</span><span class="p">(</span>
+    <span class="s2">"split"</span><span class="p">,</span>
+    <span class="n">source_uuid</span><span class="p">,</span>
+    <span class="s2">"right"</span><span class="p">,</span>
+    <span class="p">{</span><span class="s2">"directory"</span><span class="p">:</span> <span class="s2">"/home/user/dev/project"</span><span class="p">},</span>
+    <span class="n">interface</span><span class="o">=</span><span class="s2">"net.tenshu.Terminator2.Extension"</span><span class="p">,</span>
+    <span class="n">object_path</span><span class="o">=</span><span class="s2">"/net/tenshu/Terminator2/Extension"</span><span class="p">,</span>
+    <span class="n">signature</span><span class="o">=</span><span class="s2">"ssa</span><span class="si">{ss}</span><span class="s2">"</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>The default interface and object path select Terminator's built-in API. An explicit signature skips introspection. If <code>signature</code> is unset, the proxy obtains input signatures through introspection. Use <code>signature=""</code> for methods with no inputs.</p>
+<p>To call several methods on the same plugin, create a dynamic interface proxy:</p>
+<div class="highlight"><pre><span></span><code><span class="n">plugin</span> <span class="o">=</span> <span class="n">terminator</span><span class="o">.</span><span class="n">get_interface</span><span class="p">(</span>
+    <span class="s2">"net.tenshu.Terminator2.Extension"</span><span class="p">,</span>
+    <span class="n">object_path</span><span class="o">=</span><span class="s2">"/net/tenshu/Terminator2/Extension"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">terminal</span> <span class="o">=</span> <span class="n">plugin</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">source_uuid</span><span class="p">,</span> <span class="s2">"right"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"directory"</span><span class="p">:</span> <span class="s2">"/home/user/dev/project"</span><span class="p">})</span>
+</code></pre></div>
+<p>Proxy methods use introspection to obtain their signatures. Pass <code>introspect=False</code> to <code>get_interface</code> if each call supplies its own <code>signature</code>. The client reuses its bus connection and caches proxies by object path and introspection setting.</p>
+<p>To find exported interfaces and create their proxies, inspect the running service:</p>
+<div class="highlight"><pre><span></span><code><span class="n">interfaces</span> <span class="o">=</span> <span class="n">terminator</span><span class="o">.</span><span class="n">discover_interfaces</span><span class="p">()</span>
+<span class="n">plugin</span> <span class="o">=</span> <span class="n">interfaces</span><span class="p">[</span><span class="s2">"/net/tenshu/Terminator2/Extension"</span><span class="p">][</span>
+    <span class="s2">"net.tenshu.Terminator2.Extension"</span>
+<span class="p">]</span>
+<span class="n">terminal</span> <span class="o">=</span> <span class="n">plugin</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">source_uuid</span><span class="p">,</span> <span class="s2">"right"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"directory"</span><span class="p">:</span> <span class="s2">"/home/user/dev/project"</span><span class="p">})</span>
+</code></pre></div>
+<p>Discovery starts at <code>/</code> and follows child objects. Provide an object path to limit its scope, or use <code>recursive=False</code> to inspect one object. Results include standard D-Bus interfaces and Terminator's built-in interface.</p>
+<p>Discovery finds exported D-Bus interfaces; it does not list installed, enabled, or disabled Python plugins. Terminator's built-in D-Bus API does not expose that plugin metadata. Plugins must be enabled and export an interface for their methods to be callable.</p>
+<p>Generic calls preserve plugin results, including strings that start with <code>ERROR:</code>. Calls to built-in terminal creation methods still raise <code>TerminatorError</code>. Methods called directly on a dynamic proxy return raw D-Bus results. Remote D-Bus exceptions propagate in all three APIs.</p>
 <h2 id="d-bus-interface">D-Bus interface<a class="headerlink" href="#d-bus-interface" title="Permanent link">¤</a></h2>
 <p>This package follows the interface in <a href="https://github.com/gnome-terminator/terminator/blob/v2.1.6/terminatorlib/ipc.py">Terminator 2.1.6 <code>ipc.py</code></a>.</p>
 <ul>
@@ -928,13 +1258,13 @@
 <td><code>new_window()</code></td>
 <td>empty</td>
 <td>Create a window.</td>
-<td>New terminal UUID or error string</td>
+<td>New terminal UUID</td>
 </tr>
 <tr>
 <td><code>new_tab(uuid)</code></td>
 <td><code>v</code></td>
 <td>Create a tab in a terminal's window.</td>
-<td>New terminal UUID or error string</td>
+<td>New terminal UUID</td>
 </tr>
 <tr>
 <td><code>reload_configuration()</code></td>
@@ -958,13 +1288,13 @@
 <td><code>hsplit(uuid, options=None)</code></td>
 <td><code>vv</code></td>
 <td>Split a terminal horizontally.</td>
-<td>New terminal UUID or error string</td>
+<td>New terminal UUID</td>
 </tr>
 <tr>
 <td><code>vsplit(uuid, options=None)</code></td>
 <td><code>vv</code></td>
 <td>Split a terminal vertically.</td>
-<td>New terminal UUID or error string</td>
+<td>New terminal UUID</td>
 </tr>
 <tr>
 <td><code>get_terminals()</code></td>
