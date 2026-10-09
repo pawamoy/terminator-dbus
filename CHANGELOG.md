@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- insertion marker -->
+## [0.2.0](https://github.com/pawamoy/terminator-dbus/releases/tag/0.2.0) - 2026-10-09
+
+<small>[Compare with 0.1.1](https://github.com/pawamoy/terminator-dbus/compare/0.1.1...0.2.0)</small>
+
+### Features
+
+- Extend Terminator's D-Bus interface via plugin ([c5c4d98](https://github.com/pawamoy/terminator-dbus/commit/c5c4d986055afdf1dbc8f13a37fcf381b3b6e082) by Timothée Mazzucotelli).
+- Support Terminator plugins' interface ([26d59db](https://github.com/pawamoy/terminator-dbus/commit/26d59db72822789703a0ab2992af6af322e5d35b) by Timothée Mazzucotelli).
+
+### Code Refactoring
+
+- Raise errors instead of returning 'ERROR' strings ([4894b06](https://github.com/pawamoy/terminator-dbus/commit/4894b06a8bf0025bc9b59ee435416fec1d2b741f) by Timothée Mazzucotelli).
+
 ## [0.1.1](https://github.com/pawamoy/terminator-dbus/releases/tag/0.1.1) - 2026-10-06
 
 <small>[Compare with 0.1.0](https://github.com/pawamoy/terminator-dbus/compare/0.1.0...0.1.1)</small>
