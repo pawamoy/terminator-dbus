@@ -55,6 +55,9 @@ ignore = [
     "PLR2004",  # Magic value used in comparison
     "S101",  # Use of assert detected
 ]
+"src/*/plugin/*.py" = [
+    "INP001",  # Implicit namespace package
+]
 
 [lint.flake8-quotes]
 docstring-quotes = "double"

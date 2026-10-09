@@ -114,7 +114,7 @@ def session(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Any]:
         "[global_config]\n  enabled_plugins = TerminatorDBusExtension, LayoutInspector\n  always_split_with_profile = True\n[profiles]\n  [[default]]\n    scrollback_lines = 100\n[keybindings]\n[layouts]\n[plugins]\n",
     )
 
-    bus_process = subprocess.Popen(
+    bus_process = subprocess.Popen(  # noqa: S603
         [executables["dbus-daemon"], "--session", "--nofork", "--print-address=1"],
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -127,7 +127,7 @@ def session(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Any]:
         assert bus_process.stdout is not None
         address = bus_process.stdout.readline().strip()
         assert address
-        display = subprocess.Popen(
+        display = subprocess.Popen(  # noqa: S603
             [executables["Xvfb"], "-displayfd", "1", "-screen", "0", "1024x768x24", "-nolisten", "tcp"],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -148,7 +148,7 @@ def session(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Any]:
         environment.pop("WAYLAND_DISPLAY", None)
         connection = BusConnection(address)
         with (root / "terminator.log").open("w") as log:
-            terminal_process = subprocess.Popen(
+            terminal_process = subprocess.Popen(  # noqa: S603
                 [executables["terminator"], "--config", str(config)],
                 env=environment,
                 stdout=log,
